@@ -314,6 +314,40 @@
       border-color: rgba(182,1,0,0.2);
       transform: translateY(-2px);
     }
+    .feature-card.featured {
+      background: linear-gradient(135deg, rgba(182,1,0,0.12), rgba(255,215,0,0.06));
+      border: 2px solid rgba(182,1,0,0.35);
+      position: relative;
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0 1.5rem;
+      align-items: center;
+    }
+    .feature-card.featured .feature-icon {
+      grid-row: 1 / 3;
+      width: 64px;
+      height: 64px;
+      margin-bottom: 0;
+    }
+    .feature-card.featured h3 { margin-bottom: 0.25rem; font-size: 1.2rem; }
+    .feature-card.featured .featured-tag {
+      position: absolute;
+      top: -1px;
+      right: 1.5rem;
+      background: linear-gradient(135deg, #B60100, #FFD700);
+      color: #fff;
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      padding: 0.3rem 1rem;
+      border-radius: 0 0 8px 8px;
+    }
+    @media (max-width: 640px) {
+      .feature-card.featured { grid-template-columns: 1fr; }
+      .feature-card.featured .feature-icon { grid-row: auto; }
+    }
     .feature-icon {
       width: 48px;
       height: 48px;
@@ -579,12 +613,13 @@
         <p>Abertura e fechamento de caixa, suprimento, sangria, historico de sessoes e conferencia de valores.</p>
       </div>
 
-      <div class="feature-card reveal">
-        <div class="feature-icon" style="background: rgba(34,197,94,0.12); color: #22c55e;">
-          <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      <div class="feature-card featured reveal">
+        <span class="featured-tag">Destaque</span>
+        <div class="feature-icon" style="background: linear-gradient(135deg, rgba(34,197,94,0.15), rgba(255,215,0,0.1)); color: #22c55e;">
+          <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
         </div>
         <h3>Produtos Inteligentes</h3>
-        <p>Cadastro com margem automatica, preco por KG e por saco, custo por pacote, ativacao/desativacao.</p>
+        <p>Cadastre seus produtos e o sistema calcula tudo sozinho: margem de lucro automatica, preco por KG e por saco, custo por pacote e unidade. Ative ou desative produtos sem perder historico. Ideal para quem vende racao a granel e em saco fechado.</p>
       </div>
 
       <div class="feature-card reveal">
