@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
+// A conta da promocao "leve X por Y" e a mesma que a loja usa na tela.
+import { temPromocao, totalUnidades } from '../src/lib/promocao.mjs';
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VERCEL_SUPABASE_URL || 'https://jkbugbsnmygvrejjurvi.supabase.co';
 const supabaseKey = process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VERCEL_SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImprYnVnYnNubXlndnJlamp1cnZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE5MzA3MTQsImV4cCI6MjA4NzUwNjcxNH0.Q_Yho42qCLyMCUVwvG1bW6OzB9TI-0VRA4U2QeH5YTk';
@@ -1544,6 +1546,8 @@ export default async function handler(req, res) {
             preco_saco_fechado: p.preco_saco_fechado || 0,
             preco_por_kg: p.preco_por_kg || 0,
             preco_unitario: p.preco_unitario || 0,
+            promo_qtd: temPromocao(p) ? Number(p.promo_qtd) : null,
+            promo_preco: temPromocao(p) ? Number(p.promo_preco) : null,
             estoque_kg: p.estoque_kg || 0,
             estoque_unidade: p.estoque_unidade || 0,
             tem_saco: temSaco,
@@ -1680,13 +1684,20 @@ export default async function handler(req, res) {
           return res.status(409).json({ error: prod.nome + ': restam ' + (prod.estoque_kg || 0).toFixed(1) + ' kg em estoque.' });
         }
 
-        const linhaSubtotal = Math.round(qtd * precoUnit * 100) / 100;
+        // Em unidade, o combo "leve X por Y" pode baixar o subtotal da linha.
+        // O preco unitario gravado passa a ser a media efetiva, para que
+        // quantidade x preco continue batendo com o subtotal nos relatorios.
+        const emPromocao = tipoVenda === 'unidade' && temPromocao(prod);
+        const linhaSubtotal = emPromocao
+          ? totalUnidades(prod, qtd)
+          : Math.round(qtd * precoUnit * 100) / 100;
+        if (emPromocao && qtd > 0) precoUnit = Math.round((linhaSubtotal / qtd) * 10000) / 10000;
         subtotal += linhaSubtotal;
 
         let descricao = (prod.marca ? prod.marca + ' ' : '') + prod.nome;
         if (tipoVenda === 'saco') descricao += ' - Saco ' + prod.peso_saco_kg + ' kg';
         else if (tipoVenda === 'kg') descricao += ' - Fracionado ' + qtd + ' kg';
-        else descricao += ' - ' + qtd + ' un';
+        else descricao += ' - ' + qtd + ' un' + (emPromocao && qtd >= prod.promo_qtd ? ' (promo ' + prod.promo_qtd + ' por ' + Number(prod.promo_preco).toFixed(2).replace('.', ',') + ')' : '');
 
         linhas.push({
           product_id: prod.id,

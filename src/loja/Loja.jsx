@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../api';
 import { combina } from '../lib/busca';
+import { temPromocao, totalUnidades, economiaUnidades } from '../lib/promocao.mjs';
 import './loja.css';
 
 /* =====================================================================
@@ -63,6 +64,15 @@ function tagsDoProduto(p) {
   if (p.porte && ROTULO_PORTE[p.porte]) partes.push(ROTULO_PORTE[p.porte]);
   if (partes.length === 0) partes.push(p.categoria === 'racao' ? 'Ração' : 'Produto');
   return partes.join(' · ');
+}
+
+/*
+ * Valor de uma linha do carrinho. Em unidade com combo, a conta e a da
+ * promocao; em saco e kg, e quantidade x preco mesmo.
+ */
+function valorDoItem(i) {
+  if (i.tipo_venda === 'unidade' && temPromocao(i)) return totalUnidades(i, i.quantidade);
+  return Math.round(i.preco_unitario * i.quantidade * 100) / 100;
 }
 
 function precoInicial(p) {
@@ -368,6 +378,7 @@ export default function Loja() {
         quantidade: Number(it.quantidade_kg) || 1,
         preco_unitario: it.tipo_venda === 'saco' ? prod.preco_saco_fechado
           : it.tipo_venda === 'kg' ? prod.preco_por_kg : prod.preco_unitario,
+        promo_qtd: prod.promo_qtd, promo_preco: prod.promo_preco,
         peso_saco_kg: prod.peso_saco_kg,
         estoque_kg: prod.estoque_kg,
         estoque_unidade: prod.estoque_unidade,
@@ -419,7 +430,7 @@ export default function Loja() {
   const produto = useMemo(() => produtos.find((p) => p.id === produtoId) || null, [produtos, produtoId]);
 
   /* ---------------------------------------------------------- carrinho */
-  const subtotal = carrinho.reduce((s, i) => s + i.preco_unitario * i.quantidade, 0);
+  const subtotal = carrinho.reduce((s, i) => s + valorDoItem(i), 0);
   const freteGratisAcima = config?.frete_gratis_acima ?? 99;
   const freteValor = config?.frete_valor ?? 9.9;
   const frete = entrega === 'entrega' && subtotal < freteGratisAcima ? freteValor : 0;
@@ -447,6 +458,7 @@ export default function Loja() {
       tipo_venda: tipo,
       quantidade: quantia,
       preco_unitario: preco,
+      promo_qtd: produto.promo_qtd, promo_preco: produto.promo_preco,
       peso_saco_kg: produto.peso_saco_kg,
       estoque_kg: produto.estoque_kg,
       estoque_unidade: produto.estoque_unidade,
@@ -639,7 +651,7 @@ export default function Loja() {
               {(pedidoFeito.itens_local || []).map((i) => (
                 <div key={i.key} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13.5, fontWeight: 700 }}>
                   <span>{i.quantidade}x {descricaoItem(i)}</span>
-                  <span>{money(i.preco_unitario * i.quantidade)}</span>
+                  <span>{money(valorDoItem(i))}</span>
                 </div>
               ))}
             </div>
@@ -702,7 +714,9 @@ export default function Loja() {
 
     const precoUnit = ehUnidade ? produto.preco_unitario
       : formato === 'saco' ? produto.preco_saco_fechado : produto.preco_por_kg;
-    const totalItem = precoUnit * quantia;
+    const totalItem = ehUnidade ? totalUnidades(produto, quantia) : precoUnit * quantia;
+    const economia = ehUnidade ? economiaUnidades(produto, quantia) : 0;
+    const promo = ehUnidade && temPromocao(produto);
     const semEstoque = !ehUnidade && !podeSaco && !podeKg;
 
     return (
@@ -774,6 +788,24 @@ export default function Loja() {
                 </button>
               )}
 
+              {promo && (
+                <button
+                  type="button"
+                  className={`lj-opcao lj-promo ${quantia % produto.promo_qtd === 0 ? 'is-on' : ''}`}
+                  onClick={() => setQuantia(produto.promo_qtd)}
+                >
+                  <span className="lj-promo-tag">PROMO</span>
+                  <span style={{ flexGrow: 1, textAlign: 'left' }}>
+                    <span className="lj-ttl" style={{ display: 'block', fontSize: 17, lineHeight: 1.15 }}>
+                      Leve {produto.promo_qtd} por {money(produto.promo_preco)}
+                    </span>
+                    <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#8A6A62' }}>
+                      sai a {money(produto.promo_preco / produto.promo_qtd)} cada, em vez de {money(produto.preco_unitario)}
+                    </span>
+                  </span>
+                </button>
+              )}
+
               <div className="lj-caixa">
                 <div style={{ fontSize: 13, fontWeight: 800, color: '#8A6A62' }}>
                   {ehUnidade ? 'Quantas unidades?' : formato === 'saco' ? 'Quantos sacos?' : 'Quantos quilos?'}
@@ -828,6 +860,7 @@ export default function Loja() {
             <div style={{ flexShrink: 0 }}>
               <div style={{ fontSize: 11.5, fontWeight: 800, color: '#8A6A62' }}>Total</div>
               <div className="lj-ttl" style={{ fontSize: 23, color: '#7D0B0B', lineHeight: 1.05 }}>{money(totalItem)}</div>
+              {economia > 0 && <div className="lj-economia">você economiza {money(economia)}</div>}
             </div>
             <button className="lj-btn lj-btn-primario lj-btn-cresce" onClick={adicionarAoCarrinho}>
               <Ico.Carrinho c="#FFF6DC" /> Adicionar
@@ -872,7 +905,12 @@ export default function Loja() {
                         {i.tipo_venda === 'saco' ? `Saco fechado de ${i.peso_saco_kg} kg`
                           : i.tipo_venda === 'kg' ? 'Fracionado por quilo' : 'Unidade'}
                       </div>
-                      <div className="lj-ttl lj-preco" style={{ marginTop: 4 }}>{money(i.preco_unitario * i.quantidade)}</div>
+                      <div className="lj-ttl lj-preco" style={{ marginTop: 4 }}>
+                        {money(valorDoItem(i))}
+                        {i.tipo_venda === 'unidade' && economiaUnidades(i, i.quantidade) > 0 && (
+                          <span className="lj-economia">−{money(economiaUnidades(i, i.quantidade))}</span>
+                        )}
+                      </div>
                     </div>
                     <div className="lj-qtd">
                       <button className="menos" onClick={() => mudarQuantidade(i.key, -1)} aria-label="Menos"><Ico.Menos s={16} /></button>
@@ -1255,6 +1293,9 @@ export default function Loja() {
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 5 }}>
                         <span className="lj-ttl lj-preco">{money(precoInicial(p))}</span>
                         {p.tem_kg && <span className="lj-preco-kg">ou {money(p.preco_por_kg)}/kg</span>}
+                        {p.tem_unidade && temPromocao(p) && (
+                          <span className="lj-promo-chip">{p.promo_qtd} por {money(p.promo_preco)}</span>
+                        )}
                       </div>
                     ) : (
                       <span className="lj-esgotado">sem estoque</span>

@@ -29,6 +29,7 @@ const VAZIO = {
   custo_saco: '', custo_unitario: '',
   estoque_kg: '', estoque_unidade: '',
   estoque_minimo_dias: '', estoque_minimo_unidade: '',
+  promo_qtd: '', promo_preco: '',
 };
 
 const ehRacao = (c) => !c || c === 'racao';
@@ -119,6 +120,7 @@ export default function Produtos() {
       estoque_kg: p.estoque_kg ?? '', estoque_unidade: p.estoque_unidade ?? '',
       estoque_minimo_dias: p.estoque_minimo_dias ?? '',
       estoque_minimo_unidade: p.estoque_minimo_unidade ?? '',
+      promo_qtd: p.promo_qtd ?? '', promo_preco: p.promo_preco ?? '',
     });
     setEditandoId(p.id);
     setAberto(true);
@@ -184,6 +186,12 @@ export default function Produtos() {
       custo_unitario: racao ? 0 : n(form.custo_unitario),
       estoque_minimo_dias: racao ? (n(form.estoque_minimo_dias) || 7) : 0,
       estoque_minimo_unidade: racao ? 0 : n(form.estoque_minimo_unidade),
+      // Promocao "leve X por Y": so em unidade, e so com os dois campos.
+      // Um deles vazio limpa a promocao inteira — o banco recusa metade.
+      promo_qtd: !racao && Math.round(n(form.promo_qtd)) >= 2 && n(form.promo_preco) > 0
+        ? Math.round(n(form.promo_qtd)) : null,
+      promo_preco: !racao && Math.round(n(form.promo_qtd)) >= 2 && n(form.promo_preco) > 0
+        ? n(form.promo_preco) : null,
     };
 
     // Estoque so entra no cadastro; depois muda pela entrada de estoque,
@@ -445,6 +453,33 @@ export default function Produtos() {
                     <input name="estoque_minimo_unidade" value={form.estoque_minimo_unidade} onChange={mudar} placeholder="0" inputMode="numeric" />
                   </label>
                 </div>
+              )}
+
+              {!racaoNoForm && (
+                <>
+                  <div className="pn-divisor"><span>Promoção “leve X por Y”</span></div>
+                  <div className="pn-linha">
+                    <label className="pn-campo">
+                      <span>Leve (unidades)</span>
+                      <input name="promo_qtd" value={form.promo_qtd} onChange={mudar} placeholder="4" inputMode="numeric" />
+                    </label>
+                    <label className="pn-campo">
+                      <span>Por (R$)</span>
+                      <input name="promo_preco" value={form.promo_preco} onChange={mudar} placeholder="12,00" inputMode="decimal" />
+                    </label>
+                  </div>
+                  <p className="pn-ajuda">
+                    Quem levar múltiplos dessa quantidade paga o preço do combo; o que sobrar
+                    sai no preço unitário. Deixe os dois vazios para não ter promoção.
+                    {Math.round(parseFloat(String(form.promo_qtd).replace(',', '.')) || 0) >= 2
+                      && (parseFloat(String(form.promo_preco).replace(',', '.')) || 0) > 0
+                      && (parseFloat(String(form.preco_unitario).replace(',', '.')) || 0) > 0 && (
+                        <strong style={{ display: 'block', marginTop: 4 }}>
+                          {`Sai a ${money(parseFloat(String(form.promo_preco).replace(',', '.')) / Math.round(parseFloat(String(form.promo_qtd).replace(',', '.'))))} cada, em vez de ${money(parseFloat(String(form.preco_unitario).replace(',', '.')))}.`}
+                        </strong>
+                      )}
+                  </p>
+                </>
               )}
 
               {editandoId && (
