@@ -1326,10 +1326,10 @@ export default function Loja() {
           <div className="lj-secao-sub">Escolha e a gente já filtra pra você</div>
           <div className="lj-especies">
             <button className="lj-especie" onClick={() => { setEspecie('cao'); setPerfil('todos'); setPorte('todos'); setTela('catalogo'); }}>
-              <Ico.Cao /><span className="lj-ttl">Cachorro</span>
+              <Ico.Cao s={30} /><span className="lj-ttl">Cachorro</span>
             </button>
             <button className="lj-especie" onClick={() => { setEspecie('gato'); setPerfil('todos'); setPorte('todos'); setTela('catalogo'); }}>
-              <Ico.Gato /><span className="lj-ttl">Gato</span>
+              <Ico.Gato s={30} /><span className="lj-ttl">Gato</span>
             </button>
           </div>
         </div>
