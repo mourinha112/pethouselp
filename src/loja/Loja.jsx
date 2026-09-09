@@ -1367,13 +1367,11 @@ export default function Loja() {
           </button>
         )}
 
-        <button className="lj-clube" onClick={() => setTela('clube')}>
-          <span className="lj-clube-tag">CLUBE DE ASSINATURA</span>
-          <div className="lj-ttl" style={{ fontSize: 20, color: '#FFF6DC', lineHeight: 1.1, marginTop: 9 }}>Nunca mais fique sem ração</div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,246,220,0.86)', marginTop: 4 }}>
-            Peça uma vez e repete sozinho, no dia que você escolher
-          </div>
-          <img className="lj-clube-img" src="/pet-clube.png" alt="" />
+        <button
+          className="lj-banner"
+          onClick={() => { setEspecie('todos'); setPerfil('todos'); setPorte('todos'); setTela('catalogo'); }}
+        >
+          <img src="/banner-ofertas.jpg" alt="Ofertas especiais para seu pet: descontos em rações para cães e gatos" />
         </button>
 
         {maisPedidos.length > 0 && (
@@ -1407,7 +1405,7 @@ export default function Loja() {
           <div className="lj-vazio">
             <div className="lj-ttl" style={{ fontSize: 17, color: '#7D0B0B' }}>Catálogo em montagem</div>
             <div style={{ fontSize: 13.5, fontWeight: 700, marginTop: 4 }}>
-              Nenhum produto liberado para a loja ainda. No PDV, em Produtos, marque “aparece na loja online”.
+              Nenhum produto na vitrine ainda. Em /painel, na aba Produtos, clique no olho do produto para publicar.
             </div>
           </div>
         )}

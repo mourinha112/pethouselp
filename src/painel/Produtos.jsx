@@ -22,11 +22,13 @@ const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' 
 const money = (v) => brl.format(Number(v) || 0);
 
 const VAZIO = {
-  nome: '', marca: '', categoria: 'racao', descricao: '',
+  nome: '', marca: '', categoria: 'racao',
   especie: '', porte: '', perfil: '', foto_url: '',
   visivel_loja: true, vende_fracionado: true,
-  peso_saco_kg: '', preco_saco_fechado: '', preco_por_kg: '', preco_unitario: '', custo: '',
-  estoque_kg: '', estoque_unidade: '', estoque_minimo: '',
+  peso_saco_kg: '', preco_saco_fechado: '', preco_por_kg: '', preco_unitario: '',
+  custo_saco: '', custo_unitario: '',
+  estoque_kg: '', estoque_unidade: '',
+  estoque_minimo_dias: '', estoque_minimo_unidade: '',
 };
 
 const ehRacao = (c) => !c || c === 'racao';
@@ -108,13 +110,15 @@ export default function Produtos() {
   function abrirEdicao(p) {
     setForm({
       nome: p.nome || '', marca: p.marca || '', categoria: p.categoria || 'racao',
-      descricao: p.descricao || '', especie: p.especie || '', porte: p.porte || '',
+      especie: p.especie || '', porte: p.porte || '',
       perfil: p.perfil || '', foto_url: p.foto_url || '',
       visivel_loja: p.visivel_loja !== false, vende_fracionado: p.vende_fracionado !== false,
       peso_saco_kg: p.peso_saco_kg ?? '', preco_saco_fechado: p.preco_saco_fechado ?? '',
       preco_por_kg: p.preco_por_kg ?? '', preco_unitario: p.preco_unitario ?? '',
-      custo: p.custo ?? '', estoque_kg: p.estoque_kg ?? '', estoque_unidade: p.estoque_unidade ?? '',
-      estoque_minimo: p.estoque_minimo ?? '',
+      custo_saco: p.custo_saco ?? '', custo_unitario: p.custo_unitario ?? '',
+      estoque_kg: p.estoque_kg ?? '', estoque_unidade: p.estoque_unidade ?? '',
+      estoque_minimo_dias: p.estoque_minimo_dias ?? '',
+      estoque_minimo_unidade: p.estoque_minimo_unidade ?? '',
     });
     setEditandoId(p.id);
     setAberto(true);
@@ -160,7 +164,6 @@ export default function Produtos() {
       nome: form.nome.trim(),
       marca: form.marca.trim(),
       categoria: form.categoria,
-      descricao: form.descricao.trim() || null,
       especie: form.especie || null,
       porte: form.porte || null,
       perfil: form.perfil || null,
@@ -171,8 +174,16 @@ export default function Produtos() {
       preco_saco_fechado: racao ? n(form.preco_saco_fechado) : 0,
       preco_por_kg: racao ? n(form.preco_por_kg) : 0,
       preco_unitario: racao ? 0 : n(form.preco_unitario),
-      custo: n(form.custo),
-      estoque_minimo: n(form.estoque_minimo),
+      // Custo e margem sao do PDV; aqui so guardamos o custo para os
+      // relatorios de la nao ficarem com margem zerada. O `custo_por_kg` e
+      // derivado do saco, exatamente como a tela da gestao calcula.
+      custo_saco: racao ? n(form.custo_saco) : 0,
+      custo_por_kg: racao && n(form.peso_saco_kg) > 0
+        ? Math.round((n(form.custo_saco) / n(form.peso_saco_kg)) * 10000) / 10000
+        : 0,
+      custo_unitario: racao ? 0 : n(form.custo_unitario),
+      estoque_minimo_dias: racao ? (n(form.estoque_minimo_dias) || 7) : 0,
+      estoque_minimo_unidade: racao ? 0 : n(form.estoque_minimo_unidade),
     };
 
     // Estoque so entra no cadastro; depois muda pela entrada de estoque,
@@ -373,16 +384,14 @@ export default function Produtos() {
                   </select>
                 </label>
                 <label className="pn-campo">
-                  <span>Custo (opcional)</span>
-                  <input name="custo" value={form.custo} onChange={mudar} placeholder="0,00" inputMode="decimal" />
+                  <span>{racaoNoForm ? 'Custo do saco (opcional)' : 'Custo unitário (opcional)'}</span>
+                  <input
+                    name={racaoNoForm ? 'custo_saco' : 'custo_unitario'}
+                    value={racaoNoForm ? form.custo_saco : form.custo_unitario}
+                    onChange={mudar} placeholder="0,00" inputMode="decimal"
+                  />
                 </label>
               </div>
-
-              <label className="pn-campo">
-                <span>Descrição (opcional)</span>
-                <textarea name="descricao" value={form.descricao} onChange={mudar} rows={2}
-                  placeholder="Uma linha que ajude o cliente a escolher" />
-              </label>
 
               <div className="pn-divisor"><span>Preço e estoque</span></div>
 
@@ -410,8 +419,8 @@ export default function Produtos() {
                       </label>
                     )}
                     <label className="pn-campo">
-                      <span>Avisar quando ficar abaixo de (kg)</span>
-                      <input name="estoque_minimo" value={form.estoque_minimo} onChange={mudar} placeholder="0" inputMode="decimal" />
+                      <span>Avisar quando faltarem menos de (dias)</span>
+                      <input name="estoque_minimo_dias" value={form.estoque_minimo_dias} onChange={mudar} placeholder="7" inputMode="numeric" />
                     </label>
                   </div>
                   <label className="pn-marcador">
@@ -433,7 +442,7 @@ export default function Produtos() {
                   )}
                   <label className="pn-campo">
                     <span>Avisar abaixo de (un)</span>
-                    <input name="estoque_minimo" value={form.estoque_minimo} onChange={mudar} placeholder="0" inputMode="numeric" />
+                    <input name="estoque_minimo_unidade" value={form.estoque_minimo_unidade} onChange={mudar} placeholder="0" inputMode="numeric" />
                   </label>
                 </div>
               )}
