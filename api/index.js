@@ -1561,6 +1561,145 @@ export default async function handler(req, res) {
     }
 
     // Mais pedidos da loja: ranking real pelas vendas dos ultimos 90 dias
+    /* ================================================================
+       KITS PROMOCIONAIS
+       Um kit junta produtos existentes num preco so. Ele nunca vira
+       linha de pedido por si: no fechamento, abre em uma linha por
+       componente, e dali em diante e um pedido comum.
+       ================================================================ */
+
+    // Monta a visao completa de um kit: componentes com foto, preco cheio
+    // (soma dos componentes a preco normal) e se ha estoque para todos.
+    async function montarKits(filtroVitrine) {
+      let q = supabase.from('kits').select('*, kit_itens(*)').eq('ativo', true).order('created_at', { ascending: false });
+      if (filtroVitrine) q = q.eq('visivel_loja', true);
+      const { data: kits, error } = await q;
+      if (error) throw error;
+
+      const ids = [...new Set((kits || []).flatMap(k => (k.kit_itens || []).map(i => i.product_id)))];
+      const { data: prods } = ids.length
+        ? await supabase.from('products').select('*').in('id', ids)
+        : { data: [] };
+      const porId = Object.fromEntries((prods || []).map(p => [p.id, p]));
+
+      return (kits || []).map(k => {
+        let precoCheio = 0;
+        let disponivel = true;
+        const componentes = (k.kit_itens || []).map(i => {
+          const p = porId[i.product_id];
+          const qtd = Number(i.quantidade) || 0;
+          if (!p || p.ativo !== 1) { disponivel = false; return null; }
+          let unit = 0;
+          let temEstoque = false;
+          if (i.tipo_venda === 'saco') {
+            unit = Number(p.preco_saco_fechado) || 0;
+            temEstoque = (Number(p.estoque_kg) || 0) >= qtd * (Number(p.peso_saco_kg) || 0);
+          } else if (i.tipo_venda === 'kg') {
+            unit = Number(p.preco_por_kg) || 0;
+            temEstoque = (Number(p.estoque_kg) || 0) >= qtd;
+          } else {
+            unit = Number(p.preco_unitario) || 0;
+            temEstoque = (Number(p.estoque_unidade) || 0) >= qtd;
+          }
+          if (!temEstoque) disponivel = false;
+          precoCheio += unit * qtd;
+          return {
+            product_id: p.id, nome: p.nome, marca: p.marca || '', foto_url: p.foto_url || null,
+            tipo_venda: i.tipo_venda, quantidade: qtd, preco_cheio_unit: unit,
+            peso_saco_kg: Number(p.peso_saco_kg) || 0,
+          };
+        }).filter(Boolean);
+
+        return {
+          id: k.id, nome: k.nome, descricao: k.descricao || '', preco: Number(k.preco) || 0,
+          foto_url: k.foto_url || null, visivel_loja: k.visivel_loja !== false,
+          preco_cheio: Math.round(precoCheio * 100) / 100,
+          disponivel: disponivel && componentes.length > 0,
+          componentes,
+        };
+      });
+    }
+
+    if (url === '/api/shop/kits' && method === 'GET') {
+      return res.json(await montarKits(true));
+    }
+
+    if (url === '/api/kits' && method === 'GET') {
+      return res.json(await montarKits(false));
+    }
+
+    // Grava cabecalho e troca os componentes de uma vez. `itens` chega
+    // como [{product_id, tipo_venda, quantidade}].
+    async function salvarKit(id, body) {
+      const nome = String(body.nome || '').trim();
+      const preco = Number(body.preco) || 0;
+      const itens = Array.isArray(body.itens) ? body.itens : [];
+      if (!nome) return { erro: 'Informe o nome do kit' };
+      if (preco <= 0) return { erro: 'Informe o preco do kit' };
+      if (itens.length === 0) return { erro: 'Um kit precisa de pelo menos um produto' };
+
+      const cabecalho = {
+        nome, preco,
+        descricao: String(body.descricao || '').trim() || null,
+        foto_url: String(body.foto_url || '').trim() || null,
+        visivel_loja: body.visivel_loja !== false,
+        updated_at: new Date().toISOString(),
+      };
+
+      let kitId = id;
+      if (kitId) {
+        const { error } = await supabase.from('kits').update(cabecalho).eq('id', kitId);
+        if (error) throw error;
+        await supabase.from('kit_itens').delete().eq('kit_id', kitId);
+      } else {
+        const { data, error } = await supabase.from('kits').insert([cabecalho]).select('id').single();
+        if (error) throw error;
+        kitId = data.id;
+      }
+
+      const linhas = itens
+        .map(i => ({
+          kit_id: kitId,
+          product_id: Number(i.product_id),
+          tipo_venda: ['saco', 'kg', 'unidade'].includes(i.tipo_venda) ? i.tipo_venda : 'unidade',
+          quantidade: Number(i.quantidade) || 1,
+        }))
+        .filter(i => i.product_id > 0 && i.quantidade > 0);
+      const { error: e2 } = await supabase.from('kit_itens').insert(linhas);
+      if (e2) throw e2;
+      return { id: kitId };
+    }
+
+    if (url === '/api/kits' && method === 'POST') {
+      const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+      const r = await salvarKit(null, body);
+      if (r.erro) return res.status(400).json({ error: r.erro });
+      return res.status(201).json(r);
+    }
+
+    if (url.match(/^\/api\/kits\/\d+$/) && method === 'PUT') {
+      const id = Number(url.match(/(\d+)$/)[1]);
+      const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+      // Mudar so a vitrine nao precisa mandar os itens de novo
+      if (body.itens === undefined && body.nome === undefined) {
+        const { error } = await supabase.from('kits')
+          .update({ visivel_loja: body.visivel_loja !== false, updated_at: new Date().toISOString() })
+          .eq('id', id);
+        if (error) throw error;
+        return res.json({ id });
+      }
+      const r = await salvarKit(id, body);
+      if (r.erro) return res.status(400).json({ error: r.erro });
+      return res.json(r);
+    }
+
+    if (url.match(/^\/api\/kits\/\d+$/) && method === 'DELETE') {
+      const id = Number(url.match(/(\d+)$/)[1]);
+      const { error } = await supabase.from('kits').update({ ativo: false, updated_at: new Date().toISOString() }).eq('id', id);
+      if (error) throw error;
+      return res.json({ success: true });
+    }
+
     if (url === '/api/shop/destaques' && method === 'GET') {
       const desde = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
       const { data: vendas } = await supabase
@@ -1640,7 +1779,38 @@ export default async function handler(req, res) {
       const linhas = [];
       let subtotal = 0;
 
+      // Kits abrem em uma linha por componente ANTES da conta comecar. O
+      // preco fechado do kit e rateado entre as linhas na proporcao do
+      // preco cheio de cada uma (a ultima absorve o centavo do arredondamento),
+      // assim a soma bate exatamente com o que o cliente viu, e cada linha
+      // baixa o estoque do seu proprio produto no fluxo normal.
+      const itensAbertos = [];
       for (const item of items) {
+        if (!item.kit_id) { itensAbertos.push(item); continue; }
+        const vezes = Math.max(1, Math.round(parseFloat(item.quantidade_kg) || 1));
+        const kit = (await montarKits(true)).find(k => k.id === Number(item.kit_id));
+        if (!kit) return res.status(409).json({ error: 'Um dos kits saiu do catalogo. Revise o carrinho.' });
+        if (!kit.disponivel) return res.status(409).json({ error: kit.nome + ': um dos produtos do kit esta sem estoque.' });
+
+        const totalKit = Math.round(kit.preco * vezes * 100) / 100;
+        const base = kit.preco_cheio > 0 ? kit.preco_cheio : kit.componentes.reduce((s, c) => s + c.quantidade, 0);
+        let distribuido = 0;
+        kit.componentes.forEach((c, idx) => {
+          const peso = kit.preco_cheio > 0 ? (c.preco_cheio_unit * c.quantidade) / base : c.quantidade / base;
+          const ultimo = idx === kit.componentes.length - 1;
+          const parte = ultimo ? Math.round((totalKit - distribuido) * 100) / 100 : Math.round(totalKit * peso * 100) / 100;
+          distribuido += parte;
+          itensAbertos.push({
+            product_id: c.product_id,
+            tipo_venda: c.tipo_venda,
+            quantidade_kg: c.quantidade * vezes,
+            subtotal_fixo: parte,
+            rotulo_kit: kit.nome,
+          });
+        });
+      }
+
+      for (const item of itensAbertos) {
         const { data: prod } = await supabase
           .from('products')
           .select('*')
@@ -1688,13 +1858,16 @@ export default async function handler(req, res) {
         // O preco unitario gravado passa a ser a media efetiva, para que
         // quantidade x preco continue batendo com o subtotal nos relatorios.
         const emPromocao = tipoVenda === 'unidade' && temPromocao(prod);
-        const linhaSubtotal = emPromocao
-          ? totalUnidades(prod, qtd)
-          : Math.round(qtd * precoUnit * 100) / 100;
-        if (emPromocao && qtd > 0) precoUnit = Math.round((linhaSubtotal / qtd) * 10000) / 10000;
+        const vemDeKit = item.subtotal_fixo !== undefined;
+        const linhaSubtotal = vemDeKit
+          ? item.subtotal_fixo
+          : emPromocao
+            ? totalUnidades(prod, qtd)
+            : Math.round(qtd * precoUnit * 100) / 100;
+        if ((emPromocao || vemDeKit) && qtd > 0) precoUnit = Math.round((linhaSubtotal / qtd) * 10000) / 10000;
         subtotal += linhaSubtotal;
 
-        let descricao = (prod.marca ? prod.marca + ' ' : '') + prod.nome;
+        let descricao = (vemDeKit ? 'Kit ' + item.rotulo_kit + ': ' : '') + (prod.marca ? prod.marca + ' ' : '') + prod.nome;
         if (tipoVenda === 'saco') descricao += ' - Saco ' + prod.peso_saco_kg + ' kg';
         else if (tipoVenda === 'kg') descricao += ' - Fracionado ' + qtd + ' kg';
         else descricao += ' - ' + qtd + ' un' + (emPromocao && qtd >= prod.promo_qtd ? ' (promo ' + prod.promo_qtd + ' por ' + Number(prod.promo_preco).toFixed(2).replace('.', ',') + ')' : '');

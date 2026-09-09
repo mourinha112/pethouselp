@@ -4,7 +4,7 @@ import { ProvedorDeAvisos } from './Aviso';
 import Login from './Login';
 import api from '../api';
 import {
-  LayoutDashboard, ClipboardList, Package, Settings as Engrenagem,
+  LayoutDashboard, ClipboardList, Package, Gift, Settings as Engrenagem,
   ExternalLink, LogOut, Menu, X, User,
 } from 'lucide-react';
 import './painel.css';
@@ -12,6 +12,7 @@ import './painel.css';
 import Resumo from './Resumo';
 import Pedidos from './Pedidos';
 import Produtos from './Produtos';
+import Kits from './Kits';
 import Config from './Config';
 
 // O router deste painel roda com basename="/painel", entao aqui dentro
@@ -20,6 +21,7 @@ const MENU = [
   { rota: '/', rotulo: 'Resumo', icone: LayoutDashboard, exato: true },
   { rota: '/pedidos', rotulo: 'Pedidos', icone: ClipboardList },
   { rota: '/produtos', rotulo: 'Produtos', icone: Package },
+  { rota: '/kits', rotulo: 'Kits', icone: Gift },
   { rota: '/config', rotulo: 'Configurações', icone: Engrenagem },
 ];
 
@@ -140,6 +142,7 @@ export default function PainelDaLoja() {
               <Route path="/" element={<Resumo />} />
               <Route path="/pedidos" element={<Pedidos />} />
               <Route path="/produtos" element={<Produtos />} />
+              <Route path="/kits" element={<Kits />} />
               <Route path="/config" element={<Config usuario={usuario} />} />
               <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

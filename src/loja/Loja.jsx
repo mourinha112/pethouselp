@@ -243,6 +243,49 @@ function EsqueletoProduto() {
   );
 }
 
+/*
+ * Card de kit: a foto do produto principal grande, a do segundo componente
+ * sobreposta com o "x10", e o preco cheio riscado ao lado do preco do kit.
+ * Componente sem foto cai no saco desenhado do FotoProduto.
+ */
+function CardKit({ kit, aoAdicionar }) {
+  const [principal, ...resto] = kit.componentes || [];
+  const segundo = resto[0];
+  const economia = Math.max(0, Math.round((kit.preco_cheio - kit.preco) * 100) / 100);
+  return (
+    <button className="lj-kit" onClick={aoAdicionar}>
+      <div className="lj-kit-fotos">
+        {kit.foto_url ? (
+          <div className="lj-foto lj-kit-foto-unica"><img src={kit.foto_url} alt={kit.nome} loading="lazy" /></div>
+        ) : (
+          <>
+            {principal && <FotoProduto p={{ ...principal, id: principal.product_id }} tamanho="grande" />}
+            {segundo && (
+              <div className="lj-kit-segundo">
+                <FotoProduto p={{ ...segundo, id: segundo.product_id }} />
+                <span className="lj-kit-vezes">×{segundo.quantidade}</span>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+      <div style={{ flexGrow: 1, minWidth: 0 }}>
+        <span className="lj-promo-chip">KIT PROMOCIONAL</span>
+        <div className="lj-ttl lj-nome" style={{ fontSize: 16, marginTop: 6 }}>{kit.nome}</div>
+        <div className="lj-tags">
+          {(kit.componentes || []).map((c) => `${c.quantidade}x ${c.nome}`).join(' + ')}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+          {economia > 0 && <span className="lj-kit-de">{money(kit.preco_cheio)}</span>}
+          <span className="lj-ttl lj-preco" style={{ fontSize: 19 }}>{money(kit.preco)}</span>
+        </div>
+        {economia > 0 && <div className="lj-economia" style={{ marginLeft: 0 }}>você economiza {money(economia)}</div>}
+        <span className="lj-kit-btn">Adicionar kit</span>
+      </div>
+    </button>
+  );
+}
+
 function FotoProduto({ p, tamanho = 'card' }) {
   const grande = tamanho === 'grande';
   if (p.foto_url) {
@@ -269,6 +312,7 @@ function FotoProduto({ p, tamanho = 'card' }) {
 export default function Loja() {
   const [produtos, setProdutos] = useState([]);
   const [destaquesIds, setDestaquesIds] = useState([]);
+  const [kits, setKits] = useState([]);
   const [config, setConfig] = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [falhou, setFalhou] = useState('');
@@ -397,14 +441,16 @@ export default function Loja() {
     setCarregando(true);
     setFalhou('');
     try {
-      const [pRes, cRes, dRes] = await Promise.all([
+      const [pRes, cRes, dRes, kRes] = await Promise.all([
         api.get('/shop/products'),
         api.get('/shop/config'),
         api.get('/shop/destaques').catch(() => ({ data: [] })),
+        api.get('/shop/kits').catch(() => ({ data: [] })),
       ]);
       setProdutos(Array.isArray(pRes.data) ? pRes.data : []);
       setConfig(cRes.data || {});
       setDestaquesIds(Array.isArray(dRes.data) ? dRes.data : []);
+      setKits(Array.isArray(kRes.data) ? kRes.data.filter((k) => k.disponivel) : []);
     } catch (err) {
       setFalhou('Não conseguimos carregar o catálogo agora. Tente de novo em instantes.');
     } finally {
@@ -438,6 +484,17 @@ export default function Loja() {
   const totalItens = carrinho.reduce((s, i) => s + 1, 0);
 
   function limiteDoItem(item) {
+    if (item.tipo_venda === 'kit') {
+      // quantos kits cabem no estoque: o componente mais escasso manda
+      const cabem = (item.componentes || []).map((c) => {
+        const p = produtos.find((x) => x.id === c.product_id);
+        if (!p) return 1;
+        if (c.tipo_venda === 'unidade') return Math.floor((p.estoque_unidade || 0) / c.quantidade);
+        if (c.tipo_venda === 'saco') return Math.floor((p.estoque_kg || 0) / ((p.peso_saco_kg || 1) * c.quantidade));
+        return Math.floor((p.estoque_kg || 0) / c.quantidade);
+      });
+      return Math.max(1, cabem.length ? Math.min(...cabem) : 1);
+    }
     if (item.tipo_venda === 'unidade') return Math.max(1, item.estoque_unidade || 0);
     if (item.tipo_venda === 'saco') return Math.max(1, Math.floor((item.estoque_kg || 0) / (item.peso_saco_kg || 1)));
     return Math.max(1, Math.floor(item.estoque_kg || 0));
@@ -470,6 +527,27 @@ export default function Loja() {
       const teto = limiteDoItem(achou);
       return atual.map((i) => (i.key === item.key
         ? { ...i, quantidade: Math.min(teto, i.quantidade + quantia) }
+        : i));
+    });
+    setTela('carrinho');
+  }
+
+  function adicionarKit(kit) {
+    const item = {
+      key: `kit-${kit.id}`,
+      kit_id: kit.id,
+      nome: kit.nome,
+      marca: '',
+      tipo_venda: 'kit',
+      quantidade: 1,
+      preco_unitario: kit.preco,
+      componentes: kit.componentes,
+    };
+    setCarrinho((atual) => {
+      const achou = atual.find((i) => i.key === item.key);
+      if (!achou) return atual.concat([item]);
+      return atual.map((i) => (i.key === item.key
+        ? { ...i, quantidade: Math.min(limiteDoItem(i), i.quantidade + 1) }
         : i));
     });
     setTela('carrinho');
@@ -543,11 +621,9 @@ export default function Loja() {
         observacao: observacao.trim(),
         assinatura: assinar,
         frequencia,
-        items: carrinho.map((i) => ({
-          product_id: i.product_id,
-          tipo_venda: i.tipo_venda,
-          quantidade_kg: i.quantidade,
-        })),
+        items: carrinho.map((i) => (i.tipo_venda === 'kit'
+          ? { kit_id: i.kit_id, quantidade_kg: i.quantidade }
+          : { product_id: i.product_id, tipo_venda: i.tipo_venda, quantidade_kg: i.quantidade })),
       });
 
       const pedido = resposta.data;
@@ -584,6 +660,7 @@ export default function Loja() {
 
   function descricaoItem(i) {
     const base = `${i.marca ? i.marca + ' ' : ''}${i.nome}`;
+    if (i.tipo_venda === 'kit') return `Kit ${i.nome}`;
     if (i.tipo_venda === 'saco') return `${base} — saco de ${i.peso_saco_kg} kg`;
     if (i.tipo_venda === 'kg') return `${base} — fracionado`;
     return base;
@@ -902,8 +979,9 @@ export default function Loja() {
                     <div style={{ flexGrow: 1, minWidth: 0 }}>
                       <div className="lj-ttl" style={{ fontSize: 15.5, lineHeight: 1.15 }}>{i.marca} {i.nome}</div>
                       <div style={{ fontSize: 12.5, fontWeight: 700, color: '#8A6A62', marginTop: 2 }}>
-                        {i.tipo_venda === 'saco' ? `Saco fechado de ${i.peso_saco_kg} kg`
-                          : i.tipo_venda === 'kg' ? 'Fracionado por quilo' : 'Unidade'}
+                        {i.tipo_venda === 'kit' ? (i.componentes || []).map((c) => `${c.quantidade}x ${c.nome}`).join(' + ')
+                          : i.tipo_venda === 'saco' ? `Saco fechado de ${i.peso_saco_kg} kg`
+                            : i.tipo_venda === 'kg' ? 'Fracionado por quilo' : 'Unidade'}
                       </div>
                       <div className="lj-ttl lj-preco" style={{ marginTop: 4 }}>
                         {money(valorDoItem(i))}
@@ -1414,6 +1492,15 @@ export default function Loja() {
         >
           <img src="/banner-ofertas.jpg" alt="Ofertas especiais para seu pet: descontos em rações para cães e gatos" />
         </button>
+
+        {kits.length > 0 && (
+          <div>
+            <div className="lj-ttl" style={{ fontSize: 18, color: '#7D0B0B' }}>Kits em promoção</div>
+            <div className="lj-lista" style={{ marginTop: 10 }}>
+              {kits.map((k) => <CardKit key={k.id} kit={k} aoAdicionar={() => adicionarKit(k)} />)}
+            </div>
+          </div>
+        )}
 
         {maisPedidos.length > 0 && (
           <div>

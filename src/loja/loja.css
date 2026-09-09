@@ -356,6 +356,31 @@
 .lj-economia { font-size: 12px; font-weight: 800; color: var(--lj-verde); margin-left: 8px; }
 .lj-acao .lj-economia { display: block; margin: 2px 0 0; white-space: nowrap; }
 
+/* === KITS === */
+.lj-kit {
+  display: flex; gap: 14px; align-items: center; width: 100%; text-align: left;
+  background: #fff; border: 2.5px solid var(--lj-amarelo); border-radius: 22px; padding: 12px;
+  box-shadow: 0 4px 0 rgba(125, 11, 11, 0.07);
+}
+.lj-kit:active { transform: translateY(2px); }
+.lj-kit-fotos { position: relative; flex-shrink: 0; width: 118px; height: 124px; }
+.lj-kit-fotos .lj-foto { position: absolute; left: 0; top: 0; }
+.lj-kit-foto-unica { width: 118px !important; height: 124px !important; border-radius: 20px !important; }
+.lj-kit-segundo { position: absolute; right: -6px; bottom: -8px; }
+.lj-kit-segundo .lj-foto { position: static; width: 56px; height: 62px; border-radius: 14px; border: 3px solid #fff; box-shadow: 0 3px 8px rgba(0,0,0,0.14); }
+.lj-kit-vezes {
+  position: absolute; left: -8px; top: -8px;
+  background: var(--lj-vermelho); color: var(--lj-creme);
+  border-radius: 999px; padding: 3px 7px; font-size: 11.5px; font-weight: 900;
+  box-shadow: 0 2px 0 var(--lj-vermelho-esc);
+}
+.lj-kit-de { font-size: 13px; font-weight: 800; color: var(--lj-suave); text-decoration: line-through; }
+.lj-kit-btn {
+  display: inline-block; margin-top: 8px; background: var(--lj-vermelho); color: var(--lj-creme);
+  border-radius: 12px; padding: 8px 14px; font-size: 13.5px; font-weight: 800;
+  font-family: 'Baloo 2', sans-serif; box-shadow: 0 3px 0 var(--lj-vermelho-esc);
+}
+
 /* Endereco no topo + modal */
 .lj-topo-local button { background: transparent; color: var(--lj-amarelo); font-size: 12.5px; font-weight: 800; padding: 2px 4px; }
 .lj-modal-fundo {
